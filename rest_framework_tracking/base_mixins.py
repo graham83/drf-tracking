@@ -14,6 +14,10 @@ class BaseLoggingMixin(object):
 
     CLEANED_SUBSTITUTE = '********************'
 
+    # Field to disable logging entirely to avoid Exceptions/side effects when not required.
+    # It differs from `should_log` in that that doesn't stop this class from processing the request.
+    logging_enabled = True
+
     logging_methods = '__all__'
     sensitive_fields = {}
 
@@ -22,6 +26,9 @@ class BaseLoggingMixin(object):
         super(BaseLoggingMixin, self).__init__(*args, **kwargs)
 
     def initial(self, request, *args, **kwargs):
+        if not self.logging_enabled:
+            return super(BaseLoggingMixin, self).initial(request, *args, **kwargs)
+
         self.log = {}
         self.log['requested_at'] = now()
         self.log['data'] = self._clean_data(request.body)
@@ -40,12 +47,17 @@ class BaseLoggingMixin(object):
 
     def handle_exception(self, exc):
         response = super(BaseLoggingMixin, self).handle_exception(exc)
-        self.log['errors'] = traceback.format_exc()
+
+        if self.logging_enabled:
+            self.log['errors'] = traceback.format_exc()
 
         return response
 
     def finalize_response(self, request, response, *args, **kwargs):
         response = super(BaseLoggingMixin, self).finalize_response(request, response, *args, **kwargs)
+
+        if not self.logging_enabled:
+            return response
 
         # Ensure backward compatibility for those using _should_log hook
         should_log = self._should_log if hasattr(self, '_should_log') else self.should_log
